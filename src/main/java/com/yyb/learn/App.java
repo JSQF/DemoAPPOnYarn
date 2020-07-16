@@ -137,6 +137,7 @@ public class App
             Thread.sleep(1000);
             appReport = yarnClient.getApplicationReport(appId);
             appState = appReport.getYarnApplicationState();
+            System.out.println("appState: " + appState.toString());
         }
     }
 }

@@ -23,14 +23,16 @@ public class AppMaster implements AMRMClientAsync.CallbackHandler {
         System.out.println("AppMaster: Initializing");
         try {
             new AppMaster().run();
+            System.out.println("finished !");
         } catch (Exception ex) {
             ex.printStackTrace();
         }
     }
     public void run() throws Exception {
-        System.out.println("runn");
-        Thread.sleep(10000);
-        System.out.println("runn");
+        for(int i=0; i<100; i++){
+            System.out.println("running ... ");
+            Thread.sleep(1000);
+        }
     }
     @Override
     public void onContainersCompleted(List<ContainerStatus> list) {
