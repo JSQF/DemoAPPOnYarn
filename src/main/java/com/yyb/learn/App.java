@@ -17,6 +17,7 @@ import org.apache.hadoop.yarn.util.Records;
 
 import java.io.File;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.*;
 
 /**
@@ -26,6 +27,7 @@ import java.util.*;
 public class App 
 {
     private static Configuration conf;
+    private SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
     public static void main( String[] args ) throws IOException, YarnException, InterruptedException {
         System.setProperty("HADOOP_USER_NAME", "center");
         App app = new App();
@@ -75,6 +77,9 @@ public class App
         appMasterJar.setTimestamp(jarFileStatus.getModificationTime());
         appMasterJar.setType(LocalResourceType.FILE);
         appMasterJar.setVisibility(LocalResourceVisibility.APPLICATION);
+        //注意 jar 文件 在  setLocalResources 的 map 中的 key 一定要以 .jar 结束
+        //设置资源，在 APPMaster 启动的时候，Yarn 会帮我们做好资源的处理，自动下载到 Container 中，
+        //所以上面的资源一般都要上传到 hdfs 中
         amContainer.setLocalResources(Collections.singletonMap("a.jar", appMasterJar));
 
 
@@ -102,7 +107,7 @@ public class App
         }
 
         appMasterEnv.put("CLASSPATH", classPathEnv.toString());
-        System.out.println(classPathEnv.toString());
+        System.out.println("CLASSPATH: " + classPathEnv.toString());
         amContainer.setEnvironment(appMasterEnv);
 
         amContainer.setCommands(
@@ -125,6 +130,7 @@ public class App
         appContext.setResource(capability);
 
         appContext.setAMContainerSpec(amContainer);
+        appContext.setMaxAppAttempts(1);
 
         yarnClient.submitApplication(appContext);
 
@@ -137,7 +143,7 @@ public class App
             Thread.sleep(1000);
             appReport = yarnClient.getApplicationReport(appId);
             appState = appReport.getYarnApplicationState();
-            System.out.println("appState: " + appState.toString());
+            System.out.println(sdf.format(new Date()) + " appState: " + appState.toString());
         }
     }
 }

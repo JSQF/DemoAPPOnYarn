@@ -1,13 +1,17 @@
 package com.yyb.learn;
 
-import org.apache.hadoop.yarn.api.records.Container;
-import org.apache.hadoop.yarn.api.records.ContainerStatus;
-import org.apache.hadoop.yarn.api.records.NodeReport;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.yarn.api.ApplicationConstants;
+import org.apache.hadoop.yarn.api.records.*;
+import org.apache.hadoop.yarn.client.api.AMRMClient;
 import org.apache.hadoop.yarn.client.api.NMClient;
 import org.apache.hadoop.yarn.client.api.async.AMRMClientAsync;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
+import org.apache.hadoop.yarn.util.ConverterUtils;
 
+import java.net.InetAddress;
 import java.util.List;
+import java.util.Map;
 
 /**
  * @Author yyb
@@ -16,14 +20,36 @@ import java.util.List;
  * @Time 17:52
  */
 public class AppMaster implements AMRMClientAsync.CallbackHandler {
-    private YarnConfiguration conf = new YarnConfiguration();
+    private static YarnConfiguration conf = new YarnConfiguration();
     private NMClient nmClient;
     private int containerCount = 1;
     public static void main(String[] args) {
         System.out.println("AppMaster: Initializing");
         try {
+            conf.set("fs.hdfs.impl", "org.apache.hadoop.hdfs.DistributedFileSystem");
+            Map<String, String> envs = System.getenv();
+
+            String containerIdString = envs.get(ApplicationConstants.Environment.CONTAINER_ID.name());
+            if (containerIdString == null) {
+                // container id should always be set in the env by the framework
+                throw new IllegalArgumentException(
+                        "ContainerId not set in the environment");
+            }
+            ContainerId containerId = ConverterUtils.toContainerId(containerIdString);
+            ApplicationAttemptId appAttemptId = containerId.getApplicationAttemptId();
+            String attemptID = String.valueOf(appAttemptId.getAttemptId());
+
+            System.out.println("attemptID: " + attemptID);
+
+            AMRMClient<AMRMClient.ContainerRequest> amClient = AMRMClient.createAMRMClient();
+            amClient.init(conf);
+            amClient.start();
+            InetAddress address = InetAddress.getLocalHost();
+            amClient.registerApplicationMaster(address.getHostAddress(), 0, "");
+
             new AppMaster().run();
             System.out.println("finished !");
+            System.exit(0);
         } catch (Exception ex) {
             ex.printStackTrace();
         }
