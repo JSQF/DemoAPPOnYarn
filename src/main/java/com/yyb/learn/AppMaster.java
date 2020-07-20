@@ -17,8 +17,6 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.util.ConverterUtils;
 import org.apache.hadoop.yarn.util.Records;
-
-
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
@@ -48,7 +46,7 @@ public class AppMaster {
     private volatile boolean done;
     private List<Thread> launchThreads = new ArrayList<Thread>();
     private volatile boolean success;
-    private AtomicInteger numCompletedContainers = new AtomicInteger();
+    private AtomicInteger numCompletedContainers = new AtomicInteger(); //申请到的 Allocate 的 数量
     private AtomicInteger numAllocatedContainers = new AtomicInteger();
     private AtomicInteger numFailedContainers = new AtomicInteger();
 
@@ -189,8 +187,10 @@ public class AppMaster {
         return request;
     }
 
+    //AM ResourceManager 异步 回调 Handler
     private class RMCallbackHandler implements AMRMClientAsync.CallbackHandler {
 
+        //当所有的 containers 都运行完成时
         @Override
         public void onContainersCompleted(List<ContainerStatus> completedContainers) {
             System.out.println("Got response from RM for container ask, completedCnt="
@@ -221,7 +221,7 @@ public class AppMaster {
                 }
             }
 
-            int askCount = numTotalContainers - numRequestedContainers.get();
+            int askCount = numTotalContainers - numRequestedContainers.get(); //需要重新 启动的 container
             numRequestedContainers.addAndGet(askCount);
 
             if (askCount > 0) {
@@ -236,11 +236,12 @@ public class AppMaster {
             }
         }
 
+        // 当申请到所需的 container的时候，触发此方法的执行 里面可以编写 启动 containers 的逻辑
         @Override
         public void onContainersAllocated(List<Container> allocatedContainers) {
             System.out.println("Got response from RM for container ask, allocatedCnt="
                     + allocatedContainers.size());
-            numAllocatedContainers.addAndGet(allocatedContainers.size());
+            numAllocatedContainers.addAndGet(allocatedContainers.size()); //申请到的 Allocate 的 数量 +1
             for (Container allocatedContainer : allocatedContainers) {
                 System.out.println("Launching shell command on a new container."
                         + ", containerId=" + allocatedContainer.getId()
@@ -253,14 +254,16 @@ public class AppMaster {
                         + allocatedContainer.getResource().getMemory());
 
                 LaunchContainerRunnable runnableLaunchContainer = new LaunchContainerRunnable(
-                        allocatedContainer, containerListener);
+                        allocatedContainer, containerListener); //这个 containerListener 是 nodeManager 的 handler
                 Thread launchThread = new Thread(runnableLaunchContainer);
 
-                launchThreads.add(launchThread);
-                launchThread.start();
+                launchThreads.add(launchThread); //专门的线程 用来启动 某个 container
+                launchThread.start(); //启动线程
             }
         }
 
+
+        //当请求 showdown的时候
         @Override
         public void onShutdownRequest() {
             done = true;
@@ -278,6 +281,7 @@ public class AppMaster {
             return progress;
         }
 
+        // 当container 有 error 时
         @Override
         public void onError(Throwable throwable) {
             done = true;
@@ -285,10 +289,11 @@ public class AppMaster {
         }
     }
 
+    //专门的 Container 启动 线程
     private class LaunchContainerRunnable implements Runnable {
-        Container container;
+        Container container; //需要持有这一个 container对象
 
-        NMCallbackHandler containerListener;
+        NMCallbackHandler containerListener; //需要持有 NodeManagerHadnler
 
         public LaunchContainerRunnable(Container lcontainer,
                                        NMCallbackHandler containerListener) {
@@ -332,7 +337,8 @@ public class AppMaster {
                 return;
             }
             localResources.put("a.jar", appMasterJar);
-            ctx.setLocalResources(localResources);
+            ctx.setLocalResources(localResources); //设置资源
+
             Map<String, String> appMasterEnv = new HashMap();
 
             StringBuilder classPathEnv = new StringBuilder(ApplicationConstants.Environment.CLASSPATH.$$())
@@ -358,8 +364,9 @@ public class AppMaster {
             appMasterEnv.put("CLASSPATH", classPathEnv.toString());
             System.out.println("Executor CLASSPATH: " + classPathEnv.toString());
 
-            ctx.setEnvironment(appMasterEnv);
+            ctx.setEnvironment(appMasterEnv); //设置 classpath
 
+            //设置启动命令
             ctx.setCommands(
                     Collections.singletonList( ApplicationConstants.Environment.JAVA_HOME.$$() + "/bin/java"
                                     + " -Xmx512M"
@@ -371,11 +378,12 @@ public class AppMaster {
                     )
             );
 
-            containerListener.addContainer(container.getId(), container);
-            nmClientAsync.startContainerAsync(container, ctx);
+            containerListener.addContainer(container.getId(), container); //增加 监听
+            nmClientAsync.startContainerAsync(container, ctx); //开始通过 nodemanaget 启动 container
         }
     }
 
+    // NodeManager 异步 回调 Handler
     private class NMCallbackHandler implements NMClientAsync.CallbackHandler {
         private ConcurrentMap<ContainerId, Container> containers = new ConcurrentHashMap<ContainerId, Container>();
         public void addContainer(ContainerId containerId, Container container) {
@@ -387,6 +395,7 @@ public class AppMaster {
             }
         }
 
+        //当一个container 启动的时候
         @Override
         public void onContainerStarted(ContainerId containerId, Map<String, ByteBuffer> map) {
             Container container = containers.get(containerId);
